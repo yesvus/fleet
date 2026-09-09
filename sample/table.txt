@@ -1,0 +1,6 @@
+db-01    up   cpu=35.8% mem=62.75% (7.52G) disk=21.62% (57.97G) load=[2.93, 1.74, 0.06] updated=11:58:01Z
+laptop-02 up   cpu=6.51% mem=7.74% (2.48G) disk=47.51% (23.68G) load=[3.19, 3.64, 2.45] updated=11:58:52Z
+nas-02   up   cpu=27.06% mem=22.68% (8.32G) disk=45.14% (178.56G) load=[2.15, 0.79, 2.61] updated=11:59:48Z
+pi-04    up   cpu=54.64% mem=39.11% (9.83G) disk=52.44% (155.68G) load=[2.98, 0.16, 2.82] updated=11:58:06Z
+pi-05    paused cpu=- mem=- (-) disk=- (-) load=- updated=-
+web-01   up   cpu=6.34% mem=17.03% (15.68G) disk=51.14% (95.05G) load=[1.16, 2.82, 0.95] updated=11:58:07Z

@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# fleet — Beszel status from CLI, no dashboard password needed.
+# Reads the hub SQLite DB over SSH (read-only) and prints latest 1m stats.
+#
+# Usage: fleet [OPTIONS] [FILTER]
+#   FILTER                only show systems whose name contains FILTER
+# Options:
+#   --json                machine-readable JSON (for agents/pipes)
+#   --host HOST           ssh target for the hub (default: jelly)
+#   --db PATH             hub SQLite path (default: /opt/beszel/beszel_data/data.db)
+#   -h, --help            show this help and exit
+#   -v, --version         show version and exit
+# Env: BESZEL_SSH_HOST, BESZEL_DB override the defaults.
+# Examples:
+#   fleet                 table of all systems
+#   fleet zom             table, only matching names
+#   fleet --json          JSON array, all systems (pipe to jq)
+set -euo pipefail
+
+VERSION="0.3.0"
+HOST="${BESZEL_SSH_HOST:-jelly}"
+DB="${BESZEL_DB:-/opt/beszel/beszel_data/data.db}"
+JSON=0
+FILTER=""
+FILTER_SET=""
+
+usage() { sed -n '2,17p' "$0" | sed 's/^# \?//'; }
+
+set_filter() {
+  if [ -n "$FILTER_SET" ]; then
+    echo "fleet: only one FILTER allowed (see --help)" >&2
+    exit 2
+  fi
+  FILTER="$1"
+  FILTER_SET=1
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    -v|--version) echo "fleet $VERSION"; exit 0 ;;
+    --json) JSON=1; shift ;;
+    --host) HOST="${2:?--host needs a value}"; shift 2 ;;
+    --host=*) HOST="${1#--host=}"; shift ;;
+    --db) DB="${2:?--db needs a value}"; shift 2 ;;
+    --db=*) DB="${1#--db=}"; shift ;;
+    --) shift
+      if [ $# -gt 1 ]; then
+        echo "fleet: only one FILTER allowed (see --help)" >&2
+        exit 2
+      fi
+      if [ $# -eq 1 ]; then set_filter "$1"; fi
+      break ;;
+    -*) echo "unknown flag: $1 (see --help)" >&2; exit 2 ;;
+    *) set_filter "$1"; shift ;;
+  esac
+done
+
+DB_Q="$(printf '%q' "$DB")"
+SQL="SELECT s.name,s.status,s.host,st.updated,st.stats FROM systems s LEFT JOIN (SELECT system,max(updated) AS mu FROM system_stats WHERE type='1m' GROUP BY system) l ON l.system=s.id LEFT JOIN system_stats st ON st.system=l.system AND st.updated=l.mu;"
+
+ROWS="$(ssh -o ConnectTimeout=5 "$HOST" "sqlite3 -cmd '.timeout 5000' -json $DB_Q \"$SQL\"")" \
+  || { echo "fleet: failed to query hub via $HOST" >&2; exit 1; }
+
+export FLEET_FILTER="$FILTER" FLEET_JSON="$JSON"
+echo "$ROWS" | python3 -c "
+import json, os, sys
+from datetime import datetime
+
+f = os.environ.get('FLEET_FILTER', '').lower()
+want_json = os.environ.get('FLEET_JSON') == '1'
+
+try:
+    rows = json.load(sys.stdin)
+except json.JSONDecodeError as e:
+    print(f'fleet: hub returned invalid JSON: {e}', file=sys.stderr)
+    sys.exit(1)
+if not isinstance(rows, list):
+    print('fleet: hub returned unexpected data (not a list)', file=sys.stderr)
+    sys.exit(1)
+
+out = []
+for r in sorted(rows, key=lambda x: (x.get('name') or '')):
+    name = r.get('name') or '?'
+    if f and f not in name.lower():
+        continue
+    try:
+        s = json.loads(r['stats']) if r.get('stats') else {}
+        if not isinstance(s, dict):
+            s = {}
+    except (json.JSONDecodeError, TypeError):
+        print(f'fleet: warning: {name} has a bad stats blob, showing blanks', file=sys.stderr)
+        s = {}
+    ts = ''
+    if r.get('updated'):
+        try:
+            ts = datetime.fromisoformat(str(r['updated']).replace('Z', '+00:00')).strftime('%H:%M:%S')
+        except ValueError:
+            ts = str(r['updated'])
+    out.append({'name': name, 'status': r.get('status') or '?', 'host': r.get('host') or '-',
+                'updated': r.get('updated'), 'ts': ts or '-',
+                'cpu_pct': s.get('cpu'), 'mem_pct': s.get('m'),
+                'mem_used_gb': s.get('mu'), 'disk_pct': s.get('dp'),
+                'disk_used_gb': s.get('du'), 'load': s.get('la')})
+
+if not out:
+    if f:
+        print('fleet: no systems match \'%s\'' % os.environ['FLEET_FILTER'], file=sys.stderr)
+    else:
+        print('fleet: hub has no systems', file=sys.stderr)
+    sys.exit(1)
+
+if want_json:
+    print(json.dumps([{k: e[k] for k in ('name', 'status', 'host', 'updated', 'cpu_pct',
+        'mem_pct', 'mem_used_gb', 'disk_pct', 'disk_used_gb', 'load')} for e in out], indent=1))
+else:
+    def fmt(v, suffix=''):
+        return '%s%s' % (v, suffix) if v is not None else '-'
+    for e in out:
+        upd = e['ts'] + 'Z' if e['ts'] != '-' else '-'
+        load = e['load'] if e['load'] is not None else '-'
+        print('%-8s %-4s cpu=%s mem=%s (%s) disk=%s (%s) load=%s updated=%s' % (
+            e['name'], e['status'], fmt(e['cpu_pct'], '%'), fmt(e['mem_pct'], '%'),
+            fmt(e['mem_used_gb'], 'G'), fmt(e['disk_pct'], '%'),
+            fmt(e['disk_used_gb'], 'G'), load, upd))
+"

@@ -1,0 +1,94 @@
+[
+ {
+  "name": "db-01",
+  "status": "up",
+  "host": "192.0.2.11",
+  "updated": "2026-09-09 11:58:01.848Z",
+  "cpu_pct": 35.8,
+  "mem_pct": 62.75,
+  "mem_used_gb": 7.52,
+  "disk_pct": 21.62,
+  "disk_used_gb": 57.97,
+  "load": [
+   2.93,
+   1.74,
+   0.06
+  ]
+ },
+ {
+  "name": "laptop-02",
+  "status": "up",
+  "host": "192.0.2.14",
+  "updated": "2026-09-09 11:58:52.058Z",
+  "cpu_pct": 6.51,
+  "mem_pct": 7.74,
+  "mem_used_gb": 2.48,
+  "disk_pct": 47.51,
+  "disk_used_gb": 23.68,
+  "load": [
+   3.19,
+   3.64,
+   2.45
+  ]
+ },
+ {
+  "name": "nas-02",
+  "status": "up",
+  "host": "192.0.2.12",
+  "updated": "2026-09-09 11:59:48.176Z",
+  "cpu_pct": 27.06,
+  "mem_pct": 22.68,
+  "mem_used_gb": 8.32,
+  "disk_pct": 45.14,
+  "disk_used_gb": 178.56,
+  "load": [
+   2.15,
+   0.79,
+   2.61
+  ]
+ },
+ {
+  "name": "pi-04",
+  "status": "up",
+  "host": "192.0.2.13",
+  "updated": "2026-09-09 11:58:06.857Z",
+  "cpu_pct": 54.64,
+  "mem_pct": 39.11,
+  "mem_used_gb": 9.83,
+  "disk_pct": 52.44,
+  "disk_used_gb": 155.68,
+  "load": [
+   2.98,
+   0.16,
+   2.82
+  ]
+ },
+ {
+  "name": "pi-05",
+  "status": "paused",
+  "host": "192.0.2.16",
+  "updated": null,
+  "cpu_pct": null,
+  "mem_pct": null,
+  "mem_used_gb": null,
+  "disk_pct": null,
+  "disk_used_gb": null,
+  "load": null
+ },
+ {
+  "name": "web-01",
+  "status": "up",
+  "host": "192.0.2.10",
+  "updated": "2026-09-09 11:58:07.767Z",
+  "cpu_pct": 6.34,
+  "mem_pct": 17.03,
+  "mem_used_gb": 15.68,
+  "disk_pct": 51.14,
+  "disk_used_gb": 95.05,
+  "load": [
+   1.16,
+   2.82,
+   0.95
+  ]
+ }
+]
