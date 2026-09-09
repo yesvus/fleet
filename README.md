@@ -32,6 +32,8 @@ fleet [OPTIONS] [FILTER]
 
 Colors: status (`up` green, `down` red, other yellow) and usage >= 75% yellow, >= 90% red.
 
+Unrooted Android agents can't read `/proc`, so their CPU 0% / load are bogus. Their real storage shows up as `Internal`/`Shared` extra disks (`EXTRA_FILESYSTEMS`), and with `FILESYSTEM=/data` on the agent the root disk reports the real storage too (the agent de-duplicates `Internal` away). Fleet hides CPU/load for those hosts and prefers `Internal` when present, else the root values.
+
 ```sh
 fleet            # table of all systems
 fleet toa        # only matching names

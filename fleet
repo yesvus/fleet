@@ -19,7 +19,7 @@
 #   fleet --json          JSON array, all systems (pipe to jq)
 set -euo pipefail
 
-VERSION="0.4.0"
+VERSION="0.4.1"
 HOST="${BESZEL_SSH_HOST:-jelly}"
 DB="${BESZEL_DB:-/opt/beszel/beszel_data/data.db}"
 JSON=0
@@ -147,11 +147,40 @@ for r in sorted(rows, key=lambda x: (x.get('name') or '')):
             ts = datetime.fromisoformat(str(r['updated']).replace('Z', '+00:00')).strftime('%H:%M:%S')
         except ValueError:
             ts = str(r['updated'])
+    efs = s.get('efs')
+    if not isinstance(efs, dict):
+        efs = {}
+    # Unrooted Android agents can't read /proc: CPU is unmeasurable (cpu stays
+    # 0 with an all-zero cpu breakdown) and load is bogus. EXTRA_FILESYSTEMS
+    # exposes the real storage as 'Internal' (+ 'Shared'). With FILESYSTEM=/data
+    # on the agent the root disk already reports the real storage and the agent
+    # de-duplicates 'Internal' away (rover ends up with no efs at all) - so the
+    # breakdown check is the reliable signal, names are backup. Either way,
+    # prefer 'Internal' for disk when present, else trust the root values,
+    # and always hide the bogus CPU/load readings.
+    cpub = s.get('cpub')
+    cpu_unmeasurable = (
+        s.get('cpu') == 0 and isinstance(cpub, list) and len(cpub) > 0
+        and all(v == 0 for v in cpub)
+    )
+    is_android = 'Internal' in efs or 'Shared' in efs or cpu_unmeasurable
+    disk_pct, disk_used_gb = s.get('dp'), s.get('du')
+    if 'Internal' in efs:
+        internal = efs.get('Internal')
+        if not isinstance(internal, dict):
+            internal = {}
+        try:
+            total = float(internal.get('d') or 0)
+            used = float(internal.get('du') or 0)
+        except (TypeError, ValueError):
+            total, used = 0, 0
+        if total > 0:
+            disk_pct, disk_used_gb = round(used / total * 100, 2), used
     out.append({'name': name, 'status': r.get('status') or '?', 'host': r.get('host') or '-',
                 'updated': r.get('updated'), 'ts': ts or '-',
-                'cpu_pct': s.get('cpu'), 'mem_pct': s.get('mp'),
-                'mem_used_gb': s.get('mu'), 'disk_pct': s.get('dp'),
-                'disk_used_gb': s.get('du'), 'load': s.get('la')})
+                'cpu_pct': None if is_android else s.get('cpu'), 'mem_pct': s.get('mp'),
+                'mem_used_gb': s.get('mu'), 'disk_pct': disk_pct,
+                'disk_used_gb': disk_used_gb, 'load': None if is_android else s.get('la')})
 
 if not out:
     if f:
