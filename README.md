@@ -7,8 +7,6 @@ Check your Beszel-monitored hosts from the terminal. Reads the Beszel hub SQLite
 - Local: `ssh` (OpenSSH client), `python3` (>= 3.7)
 - Hub: `sqlite3` installed, Beszel hub **0.19.0** (uses the `systems` / `system_stats` schema)
 
-Missing pieces fail fast, e.g. `fleet: need python3 installed (>= 3.7)`.
-
 ## Install
 
 ```sh
@@ -40,9 +38,7 @@ fleet toa        # only matching names
 fleet --json     # JSON array, pipe to jq
 ```
 
-## Sample
-
-Fake demo data (`sample/input.json`, TEST-NET-1 IPs), rendered by fleet itself:
+## Sample output
 
 ```
 fridge        down cpu=10.15% mem=8.36% (2.48G) disk=52.02% (23.68G) load=[6.37, 7.28, 4.9] updated=06:58:52Z
