@@ -100,14 +100,15 @@ use_color = os.environ.get('FLEET_COLOR') == '1'
 def c(code, text):
     return '\x1b[%sm%s\x1b[0m' % (code, text) if use_color else text
 
-def pct(v, suffix='%'):
+def pct(v, suffix='%', ref=None):
     if v is None:
         return '-'
     t = '%s%s' % (v, suffix)
-    if isinstance(v, (int, float)):
-        if v >= 90:
+    cval = ref if ref is not None else v
+    if isinstance(cval, (int, float)):
+        if cval >= 90:
             return c('31', t)
-        if v >= 75:
+        if cval >= 75:
             return c('33', t)
     return t
 
@@ -148,7 +149,7 @@ for r in sorted(rows, key=lambda x: (x.get('name') or '')):
             ts = str(r['updated'])
     out.append({'name': name, 'status': r.get('status') or '?', 'host': r.get('host') or '-',
                 'updated': r.get('updated'), 'ts': ts or '-',
-                'cpu_pct': s.get('cpu'), 'mem_pct': s.get('m'),
+                'cpu_pct': s.get('cpu'), 'mem_pct': s.get('mp'),
                 'mem_used_gb': s.get('mu'), 'disk_pct': s.get('dp'),
                 'disk_used_gb': s.get('du'), 'load': s.get('la')})
 
@@ -169,6 +170,6 @@ else:
         load = e['load'] if e['load'] is not None else '-'
         print('%-*s %s cpu=%s mem=%s (%s) disk=%s (%s) load=%s updated=%s' % (
             w, e['name'], status(e['status']), pct(e['cpu_pct']), pct(e['mem_pct']),
-            pct(e['mem_used_gb'], 'G'), pct(e['disk_pct']), pct(e['disk_used_gb'], 'G'),
+            pct(e['mem_used_gb'], 'G', e['mem_pct']), pct(e['disk_pct']), pct(e['disk_used_gb'], 'G', e['disk_pct']),
             load, upd))
 "
