@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# fleet — Beszel status from CLI, no dashboard password needed.
+# fleet - Beszel 0.19.0 hub status from the CLI, no dashboard password needed.
 # Reads the hub SQLite DB over SSH (read-only) and prints latest 1m stats.
 #
 # Usage: fleet [OPTIONS] [FILTER]
@@ -8,28 +8,32 @@
 #   --json                machine-readable JSON (for agents/pipes)
 #   --host HOST           ssh target for the hub (default: jelly)
 #   --db PATH             hub SQLite path (default: /opt/beszel/beszel_data/data.db)
+#   --color=WHEN          color table output: auto (default), always, never
 #   -h, --help            show this help and exit
 #   -v, --version         show version and exit
 # Env: BESZEL_SSH_HOST, BESZEL_DB override the defaults.
+#   NO_COLOR disables color. JSON output is never colored.
 # Examples:
 #   fleet                 table of all systems
-#   fleet zom             table, only matching names
+#   fleet toa             table, only matching names
 #   fleet --json          JSON array, all systems (pipe to jq)
 set -euo pipefail
 
-VERSION="0.3.0"
+VERSION="0.4.0"
 HOST="${BESZEL_SSH_HOST:-jelly}"
 DB="${BESZEL_DB:-/opt/beszel/beszel_data/data.db}"
 JSON=0
+COLOR="auto"
 FILTER=""
 FILTER_SET=""
 
-usage() { sed -n '2,17p' "$0" | sed 's/^# \?//'; }
+usage() { sed -n '2,19p' "$0" | sed 's/^# \?//'; }
+
+die() { echo "fleet: $1" >&2; exit "${2:-1}"; }
 
 set_filter() {
   if [ -n "$FILTER_SET" ]; then
-    echo "fleet: only one FILTER allowed (see --help)" >&2
-    exit 2
+    die "only one FILTER allowed (see --help)" 2
   fi
   FILTER="$1"
   FILTER_SET=1
@@ -44,31 +48,76 @@ while [ $# -gt 0 ]; do
     --host=*) HOST="${1#--host=}"; shift ;;
     --db) DB="${2:?--db needs a value}"; shift 2 ;;
     --db=*) DB="${1#--db=}"; shift ;;
+    --color) COLOR="${2:?--color needs a value}"; shift 2 ;;
+    --color=*) COLOR="${1#--color=}"; shift ;;
     --) shift
       if [ $# -gt 1 ]; then
-        echo "fleet: only one FILTER allowed (see --help)" >&2
-        exit 2
+        die "only one FILTER allowed (see --help)" 2
       fi
       if [ $# -eq 1 ]; then set_filter "$1"; fi
       break ;;
-    -*) echo "unknown flag: $1 (see --help)" >&2; exit 2 ;;
+    -*) die "unknown flag: $1 (see --help)" 2 ;;
     *) set_filter "$1"; shift ;;
   esac
 done
+
+case "$COLOR" in
+  auto|always|never) ;;
+  *) die "bad --color value: $COLOR (want auto, always, never)" 2 ;;
+esac
+
+command -v ssh >/dev/null || die "need ssh installed (openssh-client)"
+command -v python3 >/dev/null || die "need python3 installed (>= 3.7)"
+
+if [ "$COLOR" = "always" ]; then
+  USE_COLOR=1
+elif [ "$COLOR" = "never" ]; then
+  USE_COLOR=0
+elif [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != "dumb" ]; then
+  USE_COLOR=1
+else
+  USE_COLOR=0
+fi
+
+ssh -o ConnectTimeout=5 "$HOST" command -v sqlite3 >/dev/null \
+  || die "cannot use $HOST (ssh failed or sqlite3 missing there)"
 
 DB_Q="$(printf '%q' "$DB")"
 SQL="SELECT s.name,s.status,s.host,st.updated,st.stats FROM systems s LEFT JOIN (SELECT system,max(updated) AS mu FROM system_stats WHERE type='1m' GROUP BY system) l ON l.system=s.id LEFT JOIN system_stats st ON st.system=l.system AND st.updated=l.mu;"
 
 ROWS="$(ssh -o ConnectTimeout=5 "$HOST" "sqlite3 -cmd '.timeout 5000' -json $DB_Q \"$SQL\"")" \
-  || { echo "fleet: failed to query hub via $HOST" >&2; exit 1; }
+  || die "failed to query hub via $HOST"
 
-export FLEET_FILTER="$FILTER" FLEET_JSON="$JSON"
+export FLEET_FILTER="$FILTER" FLEET_JSON="$JSON" FLEET_COLOR="$USE_COLOR"
 echo "$ROWS" | python3 -c "
 import json, os, sys
 from datetime import datetime
 
 f = os.environ.get('FLEET_FILTER', '').lower()
 want_json = os.environ.get('FLEET_JSON') == '1'
+use_color = os.environ.get('FLEET_COLOR') == '1'
+
+def c(code, text):
+    return '\x1b[%sm%s\x1b[0m' % (code, text) if use_color else text
+
+def pct(v, suffix='%'):
+    if v is None:
+        return '-'
+    t = '%s%s' % (v, suffix)
+    if isinstance(v, (int, float)):
+        if v >= 90:
+            return c('31', t)
+        if v >= 75:
+            return c('33', t)
+    return t
+
+def status(s):
+    s = '%-4s' % s
+    if s.strip() == 'up':
+        return c('32', s)
+    if s.strip() == 'down':
+        return c('31', s)
+    return c('33', s)
 
 try:
     rows = json.load(sys.stdin)
@@ -114,13 +163,12 @@ if want_json:
     print(json.dumps([{k: e[k] for k in ('name', 'status', 'host', 'updated', 'cpu_pct',
         'mem_pct', 'mem_used_gb', 'disk_pct', 'disk_used_gb', 'load')} for e in out], indent=1))
 else:
-    def fmt(v, suffix=''):
-        return '%s%s' % (v, suffix) if v is not None else '-'
+    w = max([8] + [len(e['name']) for e in out])
     for e in out:
         upd = e['ts'] + 'Z' if e['ts'] != '-' else '-'
         load = e['load'] if e['load'] is not None else '-'
-        print('%-8s %-4s cpu=%s mem=%s (%s) disk=%s (%s) load=%s updated=%s' % (
-            e['name'], e['status'], fmt(e['cpu_pct'], '%'), fmt(e['mem_pct'], '%'),
-            fmt(e['mem_used_gb'], 'G'), fmt(e['disk_pct'], '%'),
-            fmt(e['disk_used_gb'], 'G'), load, upd))
+        print('%-*s %s cpu=%s mem=%s (%s) disk=%s (%s) load=%s updated=%s' % (
+            w, e['name'], status(e['status']), pct(e['cpu_pct']), pct(e['mem_pct']),
+            pct(e['mem_used_gb'], 'G'), pct(e['disk_pct']), pct(e['disk_used_gb'], 'G'),
+            load, upd))
 "
