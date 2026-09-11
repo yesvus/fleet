@@ -23,7 +23,7 @@ fleet [OPTIONS] [FILTER]
 `FILTER` shows only systems whose name contains it. Options:
 
 - `--json` - machine-readable JSON (never colored)
-- `--host HOST` - ssh target of the hub (default: `jelly`)
+- `--host HOST` - ssh target of the hub (default: `ubuntu@gurbet`)
 - `--db PATH` - hub SQLite path (default: `/opt/beszel/beszel_data/data.db`)
 - `--color=WHEN` - table colors: `auto` (default, tty only), `always`, `never`
 - `-h, --help` / `-v, --version`

@@ -6,7 +6,7 @@
 #   FILTER                only show systems whose name contains FILTER
 # Options:
 #   --json                machine-readable JSON (for agents/pipes)
-#   --host HOST           ssh target for the hub (default: jelly)
+#   --host HOST           ssh target for the hub (default: ubuntu@gurbet)
 #   --db PATH             hub SQLite path (default: /opt/beszel/beszel_data/data.db)
 #   --color=WHEN          color table output: auto (default), always, never
 #   -h, --help            show this help and exit
@@ -19,8 +19,8 @@
 #   fleet --json          JSON array, all systems (pipe to jq)
 set -euo pipefail
 
-VERSION="0.4.1"
-HOST="${BESZEL_SSH_HOST:-jelly}"
+VERSION="0.5.0"
+HOST="${BESZEL_SSH_HOST:-ubuntu@gurbet}"
 DB="${BESZEL_DB:-/opt/beszel/beszel_data/data.db}"
 JSON=0
 COLOR="auto"
