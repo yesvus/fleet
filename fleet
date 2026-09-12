@@ -19,7 +19,7 @@
 #   fleet --json          JSON array, all systems (pipe to jq)
 set -euo pipefail
 
-VERSION="0.5.0"
+VERSION="0.6.0"
 HOST="${BESZEL_SSH_HOST:-ubuntu@gurbet}"
 DB="${BESZEL_DB:-/opt/beszel/beszel_data/data.db}"
 JSON=0
@@ -83,9 +83,19 @@ ssh -o ConnectTimeout=5 "$HOST" command -v sqlite3 >/dev/null \
   || die "cannot use $HOST (ssh failed or sqlite3 missing there)"
 
 DB_Q="$(printf '%q' "$DB")"
+DB_B="$(basename "$DB")"
 SQL="SELECT s.name,s.status,s.host,st.updated,st.stats FROM systems s LEFT JOIN (SELECT system,max(updated) AS mu FROM system_stats WHERE type='1m' GROUP BY system) l ON l.system=s.id LEFT JOIN system_stats st ON st.system=l.system AND st.updated=l.mu;"
 
-ROWS="$(ssh -o ConnectTimeout=5 "$HOST" "sqlite3 -cmd '.timeout 5000' -json $DB_Q \"$SQL\"")" \
+# the hub db is usually WAL-locked and unreadable for us, so query a throwaway
+# copy in /tmp instead. fresh rows included, source untouched.
+ROWS="$(ssh -o ConnectTimeout=5 "$HOST" "
+  D=\$(mktemp -d /tmp/fleet.XXXXXX) || exit 1
+  cp $DB_Q ${DB_Q}-wal ${DB_Q}-shm \"\$D/\" 2>/dev/null
+  sqlite3 -cmd '.timeout 5000' -json \"\$D/$DB_B\" \"$SQL\"
+  RC=\$?
+  rm -rf \"\$D\"
+  exit \$RC
+")" \
   || die "failed to query hub via $HOST"
 
 export FLEET_FILTER="$FILTER" FLEET_JSON="$JSON" FLEET_COLOR="$USE_COLOR"
